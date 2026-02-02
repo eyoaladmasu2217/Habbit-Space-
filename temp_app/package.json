@@ -1,0 +1,8 @@
+{
+  "name": "temp_app",
+  "version": "1.0.0",
+  "main": "blanky.js",
+  "author": "openhiun",
+  "license": "MIT",
+  "private": true
+}
