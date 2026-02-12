@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -21,11 +21,13 @@ import Animated, {
   FadeIn,
   FadeOut,
   SlideInDown,
-  Layout
+  Layout,
+  interpolate,
+  useDerivedValue
 } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Plus, X, Check, Trash2, Calendar, TrendingUp } from 'lucide-react-native';
+import { Plus, X, Check, Trash2, Calendar, TrendingUp, Flame, Quote, Trophy } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 const COLUMNS = 2;
@@ -42,8 +44,50 @@ const DEFAULT_HABITS = [
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD', '#D4A5A5', '#A29BFE', '#FAB1A0'];
 const ICONS = ['🏃', '📚', '💧', '🧘', '💻', '✍️', '🥦', '🎸', '🌱', '☀️'];
 
+const MOTIVATIONAL_QUOTES = [
+  "Believe you can and you're halfway there.",
+  "Your only limit is your mind.",
+  "Small steps lead to big changes.",
+  "Consistency is the key to success.",
+  "Don't stop until you're proud.",
+  "Every day is a new opportunity."
+];
+
+// Helper to calculate streak
+const calculateStreak = (completedDays) => {
+  if (!completedDays || completedDays.length === 0) return 0;
+  
+  const sortedDates = [...completedDays]
+    .map(d => new Date(d).getTime())
+    .sort((a, b) => b - a);
+  
+  let streak = 0;
+  let currentDate = new Date();
+  currentDate.setHours(0, 0, 0, 0);
+  
+  const todayTime = currentDate.getTime();
+  const yesterdayTime = todayTime - 86400000;
+  
+  // If not completed today or yesterday, streak is broken
+  if (sortedDates[0] < yesterdayTime) return 0;
+  
+  let expectedTime = sortedDates[0];
+  
+  for (let i = 0; i < sortedDates.length; i++) {
+    if (sortedDates[i] === expectedTime) {
+      streak++;
+      expectedTime -= 86400000;
+    } else {
+      break;
+    }
+  }
+  
+  return streak;
+};
+
 const HabitItem = ({ item, onPress, onLongPress }) => {
   const isCompletedToday = item.completedDays.includes(new Date().toDateString());
+  const streak = useMemo(() => calculateStreak(item.completedDays), [item.completedDays]);
   
   return (
     <TouchableOpacity 
@@ -58,11 +102,24 @@ const HabitItem = ({ item, onPress, onLongPress }) => {
       >
         <Text style={styles.habitIcon}>{item.icon}</Text>
         <Text style={styles.habitTitle} numberOfLines={1}>{item.title}</Text>
+        
+        {streak > 0 && (
+          <View style={styles.streakBadge}>
+            <Flame size={10} color="#fff" fill="#fff" />
+            <Text style={styles.streakText}>{streak}</Text>
+          </View>
+        )}
+
         {isCompletedToday && (
           <View style={styles.completedBadge}>
             <Check size={12} color="#fff" strokeWidth={3} />
           </View>
         )}
+        
+        {/* Simple Progress Indicator */}
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressBar, { width: `${Math.min(streak * 10, 100)}%` }]} />
+        </View>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -72,6 +129,8 @@ const HabitSpace = ({ item, onClose, onToggleComplete, onDelete }) => {
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
   const isCompletedToday = item.completedDays.includes(new Date().toDateString());
+  const streak = useMemo(() => calculateStreak(item.completedDays), [item.completedDays]);
+  const quote = useMemo(() => MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)], []);
 
   useEffect(() => {
     scale.value = withSpring(1);
@@ -125,7 +184,14 @@ const HabitSpace = ({ item, onClose, onToggleComplete, onDelete }) => {
           </View>
           
           <ScrollView contentContainerStyle={styles.spaceContent}>
-            <Text style={styles.bigIcon}>{item.icon}</Text>
+            <View style={styles.bigIconContainer}>
+              <Text style={styles.bigIcon}>{item.icon}</Text>
+              {streak >= 3 && (
+                <View style={styles.trophyIcon}>
+                   <Trophy size={30} color="#FFD700" fill="#FFD700" />
+                </View>
+              )}
+            </View>
             
             <TouchableOpacity 
               style={[styles.checkInBtn, isCompletedToday && styles.checkInBtnDone]}
@@ -134,30 +200,33 @@ const HabitSpace = ({ item, onClose, onToggleComplete, onDelete }) => {
               {isCompletedToday ? (
                 <View style={styles.row}>
                   <Check size={24} color="#fff" style={{ marginRight: 10 }} />
-                  <Text style={styles.checkInText}>Completed Today!</Text>
+                  <Text style={styles.checkInText}>Done for today!</Text>
                 </View>
               ) : (
-                <Text style={styles.checkInText}>Check In for Today</Text>
+                <Text style={styles.checkInText}>Mark as Done</Text>
               )}
             </TouchableOpacity>
 
             <View style={styles.statsContainer}>
               <View style={styles.statBox}>
-                <TrendingUp size={24} color="#fff" />
-                <Text style={styles.statNumber}>{item.completedDays.length}</Text>
-                <Text style={styles.statLabel}>Total Days</Text>
+                <Flame size={24} color="#fff" fill={streak > 0 ? "#fff" : "transparent"} />
+                <Text style={styles.statNumber}>{streak}</Text>
+                <Text style={styles.statLabel}>Day Streak</Text>
               </View>
               <View style={styles.statBox}>
-                <Calendar size={24} color="#fff" />
-                <Text style={styles.statNumber}>
-                  {item.completedDays.length > 0 ? 'Active' : 'New'}
-                </Text>
-                <Text style={styles.statLabel}>Status</Text>
+                <TrendingUp size={24} color="#fff" />
+                <Text style={styles.statNumber}>{item.completedDays.length}</Text>
+                <Text style={styles.statLabel}>Total Times</Text>
               </View>
             </View>
 
+            <View style={styles.quoteCard}>
+              <Quote size={20} color="rgba(255,255,255,0.6)" style={{ marginBottom: 10 }} />
+              <Text style={styles.quoteText}>{quote}</Text>
+            </View>
+
             <Text style={styles.instructions}>
-              Pinch in to zoom out and return to your dashboard.
+              Pinch in to return to dashboard
             </Text>
           </ScrollView>
         </SafeAreaView>
@@ -237,13 +306,23 @@ export default function App() {
     }
   };
 
+  const totalStreak = useMemo(() => {
+    return habits.reduce((acc, h) => acc + calculateStreak(h.completedDays), 0);
+  }, [habits]);
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <StatusBar style="light" />
       
       <SafeAreaView style={styles.flex}>
         <View style={styles.gridHeader}>
-          <Text style={styles.appTitle}>Habbit Space</Text>
+          <View>
+            <Text style={styles.appTitle}>Habbit Space</Text>
+            <View style={styles.row}>
+               <Flame size={14} color="#FF6B6B" fill="#FF6B6B" />
+               <Text style={styles.totalStreakText}>{totalStreak} Total Streak</Text>
+            </View>
+          </View>
           <TouchableOpacity 
             style={styles.addBtn} 
             onPress={() => setIsModalVisible(true)}
@@ -258,13 +337,12 @@ export default function App() {
               key={habit.id} 
               item={habit} 
               onPress={setSelectedHabit}
-              onLongPress={(h) => Alert.alert(h.title, "Zoom in to see details and manage this habit.")}
+              onLongPress={(h) => Alert.alert(h.title, "Long press action!")}
             />
           ))}
         </ScrollView>
       </SafeAreaView>
 
-      {/* Modal for adding new habits */}
       <Modal visible={isModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <Animated.View entering={SlideInDown} style={styles.modalContent}>
@@ -277,13 +355,13 @@ export default function App() {
 
             <TextInput
               style={styles.input}
-              placeholder="Habit Name (e.g. Yoga)"
+              placeholder="Habit Name"
               value={newHabitTitle}
               onChangeText={setNewHabitTitle}
               placeholderTextColor="#999"
             />
 
-            <Text style={styles.label}>Choose Color</Text>
+            <Text style={styles.label}>Color</Text>
             <View style={styles.colorRow}>
               {COLORS.map(c => (
                 <TouchableOpacity 
@@ -294,7 +372,7 @@ export default function App() {
               ))}
             </View>
 
-            <Text style={styles.label}>Choose Icon</Text>
+            <Text style={styles.label}>Icon</Text>
             <View style={styles.iconRow}>
               {ICONS.map(i => (
                 <TouchableOpacity 
@@ -314,7 +392,6 @@ export default function App() {
         </View>
       </Modal>
 
-      {/* Zoomed In Space View */}
       {selectedHabit && (
         <View style={styles.overlay}>
           <HabitSpace 
@@ -341,6 +418,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   appTitle: { fontSize: 32, fontWeight: '900', color: '#fff' },
+  totalStreakText: { color: '#888', fontSize: 14, marginLeft: 5, fontWeight: '600' },
   addBtn: {
     width: 44,
     height: 44,
@@ -367,6 +445,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
+    overflow: 'hidden',
   },
   habitIcon: { fontSize: 42, marginBottom: 8 },
   habitTitle: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', paddingHorizontal: 10 },
@@ -374,9 +453,33 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 10,
     padding: 4,
+  },
+  streakBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  streakText: { color: '#fff', fontSize: 10, fontWeight: '900', marginLeft: 2 },
+  progressTrack: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   overlay: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   spaceContainer: { flex: 1 },
@@ -397,19 +500,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   spaceTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },
-  spaceContent: { alignItems: 'center', paddingTop: 40, paddingHorizontal: 30 },
+  spaceContent: { alignItems: 'center', paddingTop: 30, paddingHorizontal: 30 },
+  bigIconContainer: { position: 'relative' },
   bigIcon: { fontSize: 100, marginBottom: 30 },
+  trophyIcon: { position: 'absolute', bottom: 20, right: -10, elevation: 5 },
   checkInBtn: {
     width: '100%',
     padding: 20,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     marginBottom: 30,
   },
   checkInBtnDone: { backgroundColor: 'rgba(0,0,0,0.2)' },
-  checkInText: { fontSize: 18, fontWeight: '700', color: '#fff' },
-  statsContainer: { flexDirection: 'row', gap: 15, marginBottom: 40 },
+  checkInText: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  statsContainer: { flexDirection: 'row', gap: 15, marginBottom: 30 },
   statBox: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -418,16 +523,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: { fontSize: 28, fontWeight: '900', color: '#fff', marginVertical: 5 },
-  statLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
-  instructions: { color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center' },
+  statLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '700' },
+  quoteCard: {
+    width: '100%',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    padding: 25,
+    borderRadius: 24,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  quoteText: {
+    color: '#fff',
+    fontSize: 16,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+  instructions: { color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
   
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalContent: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 30,
@@ -435,40 +551,16 @@ const styles = StyleSheet.create({
     padding: 30,
     minHeight: height * 0.6,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 25,
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
   modalTitle: { fontSize: 24, fontWeight: '800', color: '#333' },
-  input: {
-    backgroundColor: '#f5f5f5',
-    padding: 18,
-    borderRadius: 15,
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 20,
-  },
-  label: { fontSize: 14, fontWeight: '700', color: '#666', marginBottom: 12, marginTop: 10 },
+  input: { backgroundColor: '#f5f5f5', padding: 18, borderRadius: 15, fontSize: 16, color: '#333', marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: '700', color: '#666', marginBottom: 12 },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
   colorCircle: { width: 35, height: 35, borderRadius: 17.5 },
   selectedCircle: { borderWidth: 3, borderColor: '#333' },
   iconRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 30 },
-  iconCircle: { 
-    width: 45, 
-    height: 45, 
-    borderRadius: 12, 
-    backgroundColor: '#f5f5f5', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
+  iconCircle: { width: 45, height: 45, borderRadius: 12, backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' },
   selectedIconCircle: { backgroundColor: '#e0e0e0', borderWidth: 2, borderColor: '#333' },
-  createBtn: {
-    backgroundColor: '#1a1a1a',
-    padding: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
+  createBtn: { backgroundColor: '#1a1a1a', padding: 20, borderRadius: 20, alignItems: 'center' },
   createBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });
